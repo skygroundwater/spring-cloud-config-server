@@ -1,0 +1,7 @@
+example:
+  property: I AM DEV
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/template1
+    username: postgres
+    password: Tilitilitatata12345
