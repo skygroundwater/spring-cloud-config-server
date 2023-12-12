@@ -1,0 +1,156 @@
+version: '2.1'
+services:
+  # vault:
+  #  image: hashicorp/vault
+  # ports:
+  #  - "8200:8200"
+  #environment:
+  # VAULT_DEV_ROOT_TOKEN_ID: "myroot"
+  # VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+  #networks:
+  # backend:
+  #  aliases:
+  #   - "vault"
+
+  vault:
+    image: "hashicorp/vault"
+    container_name: "vault"
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_LISTEN_ADDRES: "0.0.0.0:8200"
+      VAULT_DEV_ROOT_TOKEN_ID: "myroot"
+    networks:
+      backend:
+        aliases:
+          - "vault"
+
+  eureka:
+    image: eureka
+    ports:
+      - "8070:8070"
+    depends_on:
+      configserver:
+        condition: service_started
+    environment:
+      CONFIGSERVER_URI: "http://spring-cloud-config-server:"
+      CONFIGSERVER_PORT: "8071/"
+      PROFILE: "dev"
+      CONFIGSERVER_NAME: "spring-cloud-config-server"
+      APPLICATION_NAME: "eureka-server"
+      EUREKA_INSTANCE_HOSTNAME: "localhost"
+      SERVER_PORT: "8070"
+    networks:
+      backend:
+        aliases:
+          - "eureka"
+  database:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/1-init.sql
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "Tilitilitatata12345"
+      POSTGRES_DB: "olegmetelev"
+    networks:
+      backend:
+        aliases:
+          - "database"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  configserver:
+    image: spring-cloud-config-server
+    ports:
+      - "8071:8071"
+    depends_on:
+      vault:
+        condition: service_completed_successfully
+    environment:
+      GIT_USERNAME: "skygroundwater"
+      GIT_PASSWORD: "Tilitilitatata12345"
+      GIT_URI: "https://github.com/skygroundwater/spring-cloud-configuration-properties-repository"
+      GIT_SSH_PRIVATE_KEY: "GKwJxKSVDUWXW9oXEIms/pHT7wgXHQqSg/ceiWomQGg"
+      GIT_SEARCH_PATHS: "licensing-service"
+      SERVER_PORT: "8071"
+      PROFILES: "vault"
+      APPLICATION_NAME: "spring-cloud-config-server"
+      VAULT_PORT: "8200"
+      VAULT_HOST: "vault"
+      VAULT_AUTH: "token"
+      VAULT_TOKEN: "myroot"
+      KV_VERSION: "2"
+      ENCRYPT_KEY: "fje83Ki8403Iod87dne7Yjsl3THueh48jfuO9j4U2hf64Lo"
+    networks:
+      backend:
+        aliases:
+          - "spring-cloud-config-server"
+  licensingservice:
+    image: licensing-service
+    hostname: "licensing-service"
+    environment:
+      SERVER_PORT: "8090"
+      PROFILE: "dev"
+      EUREKA_INSTANCE_HOSTNAME: "eureka"
+      EUREKA_SERVER_PORT: "8070"
+      CONFIGSERVER_URI: "http://spring-cloud-config-server:"
+      CONFIGSERVER_PORT: "8071"
+      CONFIGSERVER_NAME: "spring-cloud-config-server"
+      APPLICATION_NAME: "licensing-service"
+      DATABASESERVER_PORT: "5432"
+      DATABASESERVER_HOST: "jdbc:postgresql://database:"
+      DATABASE_NAME: "public"
+      DATABASE_USERNAME: "postgres"
+      DATABASE_PASSWORD: "Tilitilitatata12345"
+      ENCRYPT_KEY: "IMSYMMETRIC"
+    depends_on:
+      database:
+        condition: service_healthy
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      backend:
+        aliases:
+          - "licensing-service"
+  organizationservice:
+    image: organization-service
+    hostname: "organization-service"
+    environment:
+      SERVER_PORT: "8090"
+      PROFILE: "dev"
+      EUREKA_SERVER_PORT: "8070"
+      EUREKA_INSTANCE_HOSTNAME: "eureka"
+      CONFIGSERVER_URI: "http://spring-cloud-config-server:"
+      CONFIGSERVER_PORT: "8071"
+      CONFIGSERVER_NAME: "spring-cloud-config-server"
+      APPLICATION_NAME: "organization-service"
+      DATABASESERVER_PORT: "5432"
+      DATABASESERVER_HOST: "jdbc:postgresql://database:"
+      DATABASE_NAME: "public"
+      DATABASE_USERNAME: "postgres"
+      DATABASE_PASSWORD: "Tilitilitatata12345"
+      ENCRYPT_KEY: "IMSYMMETRIC"
+    depends_on:
+      database:
+        condition: service_healthy
+      configserver:
+        condition: service_started
+      eureka:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    networks:
+      backend:
+        aliases:
+          - "organization-service"
+networks:
+  backend:
+    driver: bridge
