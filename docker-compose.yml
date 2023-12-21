@@ -1,20 +1,33 @@
 version: '2.1'
 services:
-  # vault:
-  #  image: hashicorp/vault
-  # ports:
-  #  - "8200:8200"
-  #environment:
-  # VAULT_DEV_ROOT_TOKEN_ID: "myroot"
-  # VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-  #networks:
-  # backend:
-  #  aliases:
-  #   - "vault"
+
+  keycloak:
+    image: jboss/keycloak
+    restart: always
+    environment:
+      KEYCLOAK_VERSION: 6.0.1
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+    volumes:
+      - ./realm-export.json:/opt/jboss/keycloak/realm-export.json
+    command:
+      - "-b 0.0.0.0"
+      - "-Dkeycloak.import=/opt/jboss/keycloak/realm-export.json"
+      - "-Dkeycloak.profile.feature.scripts=enabled"
+      - "-Dkeycloak.profile.feature.upload_scripts=enabled"
+    ports:
+      - "8020:8020"
+    networks:
+      backend:
+        aliases:
+          - "keycloak"
 
   vault:
     image: "hashicorp/vault"
     container_name: "vault"
+    depends_on:
+      keycloak:
+        condition: service_completed_successfully
     ports:
       - "8200:8200"
     environment:
@@ -44,16 +57,15 @@ services:
       backend:
         aliases:
           - "eureka"
+
   database:
     image: postgres:15
     ports:
       - "5432:5432"
-    volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/1-init.sql
     environment:
       POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "Tilitilitatata12345"
-      POSTGRES_DB: "olegmetelev"
+      POSTGRES_DB: "public"
     networks:
       backend:
         aliases:
@@ -63,6 +75,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  api-gateway:
+    image: api-gateway
+    ports:
+      - "8040:8040"
+    environment:
+      SERVER_PORT: "8040"
+      PROFILE: "dev"
+      APPLICATION_NAME: "spring-cloud-api-gateway"
+      EUREKA_INSTANCE_HOSTNAME: "eureka"
+      EUREKA_SERVER_PORT: "8070"
+      CONFIGSERVER_URI: "http://spring-cloud-config-server:"
+      CONFIGSERVER_PORT: "8071"
+      CONFIGSERVER_NAME: "spring-cloud-config-server"
+    networks:
+      backend:
+        aliases:
+          - "api-gateway"
+
   configserver:
     image: spring-cloud-config-server
     ports:
@@ -71,11 +102,11 @@ services:
       vault:
         condition: service_completed_successfully
     environment:
-      GIT_USERNAME: "skygroundwater"
-      GIT_PASSWORD: "Tilitilitatata12345"
-      GIT_URI: "https://github.com/skygroundwater/spring-cloud-configuration-properties-repository"
-      GIT_SSH_PRIVATE_KEY: "GKwJxKSVDUWXW9oXEIms/pHT7wgXHQqSg/ceiWomQGg"
-      GIT_SEARCH_PATHS: "licensing-service"
+      #      GIT_USERNAME: "skygroundwater"
+      #      GIT_PASSWORD: "Tilitilitatata12345"
+      #      GIT_URI: "https://github.com/skygroundwater/spring-cloud-configuration-properties-repository"
+      #      GIT_SSH_PRIVATE_KEY: "GKwJxKSVDUWXW9oXEIms/pHT7wgXHQqSg/ceiWomQGg"
+      #      GIT_SEARCH_PATHS: "licensing-service"
       SERVER_PORT: "8071"
       PROFILES: "vault"
       APPLICATION_NAME: "spring-cloud-config-server"
@@ -89,11 +120,14 @@ services:
       backend:
         aliases:
           - "spring-cloud-config-server"
+
   licensingservice:
     image: licensing-service
     hostname: "licensing-service"
+    volumes:
+      - ./licensing-service-data.sql:/docker-entrypoint-licensing-service-datadb.d/1-licensing-service-data.sql
     environment:
-      SERVER_PORT: "8090"
+      SERVER_PORT: "8080"
       PROFILE: "dev"
       EUREKA_INSTANCE_HOSTNAME: "eureka"
       EUREKA_SERVER_PORT: "8070"
@@ -107,6 +141,12 @@ services:
       DATABASE_USERNAME: "postgres"
       DATABASE_PASSWORD: "Tilitilitatata12345"
       ENCRYPT_KEY: "IMSYMMETRIC"
+      KEYCLOAK_REALM: "spmia-realm"
+      KEYCLOAK_SERVER_PORT: "8020"
+      KEYCLOAK_HOSTNAME: "keycloak"
+      KEYCLOAK_SSL_REQUIRED: "external"
+      KEYCLOAK_RESOURCE_CLIENT: "ostock"
+      KEYCLOAK_CRED_SECRET_TOKEN: "Y6NQnNxh457qv0wdgRE8mwj1sbUyGtcf"
     depends_on:
       database:
         condition: service_healthy
@@ -120,9 +160,12 @@ services:
       backend:
         aliases:
           - "licensing-service"
+
   organizationservice:
     image: organization-service
     hostname: "organization-service"
+    volumes:
+      - ./organization-service-data.sql:/docker-entrypoint-organization-service-datadb.d/1-organization-service-data.sql
     environment:
       SERVER_PORT: "8090"
       PROFILE: "dev"
@@ -138,7 +181,15 @@ services:
       DATABASE_USERNAME: "postgres"
       DATABASE_PASSWORD: "Tilitilitatata12345"
       ENCRYPT_KEY: "IMSYMMETRIC"
+      KEYCLOAK_REALM: "spmia-realm"
+      KEYCLOAK_SERVER_PORT: "8020"
+      KEYCLOAK_HOSTNAME: "keycloak"
+      KEYCLOAK_SSL_REQUIRED: "external"
+      KEYCLOAK_RESOURCE_CLIENT: "ostock"
+      KEYCLOAK_CRED_SECRET_TOKEN: "Y6NQnNxh457qv0wdgRE8mwj1sbUyGtcf"
     depends_on:
+      keycloak:
+        condition: service_healthy
       database:
         condition: service_healthy
       configserver:
