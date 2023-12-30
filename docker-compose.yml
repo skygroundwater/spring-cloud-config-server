@@ -2,6 +2,7 @@ version: '2.1'
 services:
   keycloak:
     image: jboss/keycloak
+    container_name: 'keycloak'
     environment:
       KEYCLOAK_USER: admin
       KEYCLOAK_PASSWORD: admin
@@ -19,7 +20,7 @@ services:
         aliases:
           - "keycloak"
   vault:
-    image: "hashicorp/vault"
+    image: hashicorp/vault
     container_name: "vault"
     depends_on:
       keycloak:
@@ -35,6 +36,7 @@ services:
           - "vault"
   eureka:
     image: eureka
+    container_name: 'eureka'
     ports:
       - "8070:8070"
     depends_on:
@@ -56,6 +58,7 @@ services:
 
   zookeeper:
     image: wurstmeister/zookeeper
+    container_name: 'zookeeper'
     ports:
       - "2181:2181"
     platform: linux/amd64
@@ -83,9 +86,9 @@ services:
         aliases:
           - "kafka"
 
-
   redisserver:
     image: redis:alpine
+    container_name: 'redis'
     ports:
       - "6379:6379"
     networks:
@@ -96,6 +99,7 @@ services:
 
   database:
     image: postgres:15
+    container_name: 'psql-database'
     ports:
       - "5432:5432"
     environment:
@@ -111,8 +115,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+
   api-gateway:
-    image: api-gateway
+    image: spring-cloud-api-gateway
+    container_name: 'api-gateway'
     ports:
       - "8040:8040"
     depends_on:
@@ -135,8 +142,11 @@ services:
       backend:
         aliases:
           - "api-gateway"
+
+
   configserver:
     image: spring-cloud-config-server
+    container_name: 'config-server'
     ports:
       - "8071:8071"
     depends_on:
@@ -161,8 +171,10 @@ services:
       backend:
         aliases:
           - "spring-cloud-config-server"
+
   licensingservice:
     image: licensing-service
+    container_name: 'licensing-service'
     hostname: "licensing-service"
     volumes:
       - ./licensing-service-data.sql:/docker-entrypoint-licensing-service-datadb.d/1-licensing-service-data.sql
@@ -199,8 +211,10 @@ services:
       backend:
         aliases:
           - "licensing-service"
+
   organizationservice:
     image: organization-service
+    container_name: 'organization-service'
     hostname: "organization-service"
     volumes:
       - ./organization-service-data.sql:/docker-entrypoint-organization-service-datadb.d/1-organization-service-data.sql
@@ -239,6 +253,81 @@ services:
       backend:
         aliases:
           - "organization-service"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+    container_name: 'elasticsearch'
+    platform: linux/amd64
+    environment:
+      - node.name=elasticsearch
+      - discovery.type=single-node
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+    ports:
+      - '9300:9300'
+      - '9200:9200'
+    networks:
+      backend:
+        aliases:
+          - "elasticsearch"
+
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.7.0
+    container_name: 'kibana'
+    platform: linux/amd64
+    environment:
+      ELASTICSEARCH_URL: "http://elasticsearch:9300"
+    ports:
+      - 5601:5601
+    networks:
+      backend:
+        aliases:
+          - "kibana"
+
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.7.0
+    container_name: 'logstash'
+    platform: linux/amd64
+    command: logstash -f /etc/logstash/conf.d/logstash.conf
+    volumes:
+      - ./logstash-config:/etc/logstash/conf.d
+    ports:
+      - "5100:5100"
+    networks:
+      backend:
+        aliases:
+          - "logstash"
+
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: 'zipkin'
+    platform: linux/amd64
+    depends_on:
+      - elasticsearch
+    environment:
+      - STORAGE_TYPE=elasticsearch
+      - "ES_HOSTS=elasticsearch:9300"
+    ports:
+      - "9411:9411"
+    networks:
+      backend:
+        aliases:
+          - "zipkin"
+
+volumes:
+  esdata1:
+    driver: local
+
 networks:
   backend:
     driver: bridge
